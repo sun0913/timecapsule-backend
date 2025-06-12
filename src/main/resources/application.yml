@@ -1,0 +1,101 @@
+# 时光信笺 - 基础配置
+spring:
+  application:
+    name: timecapsule-backend
+  
+  # 环境配置
+  profiles:
+    active: dev  # 开发环境配置
+
+  # Jackson配置
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    serialization:
+      write-dates-as-timestamps: false
+  
+  # 文件上传配置
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 20MB
+  
+  # MVC配置
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+
+# 服务器配置
+server:
+  port: 8080
+  servlet:
+    context-path: /
+  tomcat:
+    uri-encoding: UTF-8
+    threads:
+      max: 200
+      min-spare: 30
+
+# MyBatis Plus配置
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.timecapsule.**.entity
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+    banner: false
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# 日志配置
+logging:
+  level:
+    com.timecapsule: debug
+    org.springframework.web: info
+    org.springframework.security: info
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/timecapsule.log
+
+# Knife4j配置
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+    enable-swagger-models: true
+    enable-document-manage: true
+    swagger-model-name: 时光信笺
+  documents:
+    - group: 用户模块
+      name: 用户相关接口
+      locations: classpath:api-docs/user.md
+    - group: 系统模块
+      name: 系统相关接口
+      locations: classpath:api-docs/system.md
+
+# 应用自定义配置
+app:
+  # JWT配置
+  jwt:
+    header: Authorization
+    prefix: Bearer
+    secret: ${JWT_SECRET:timecapsule-jwt-secret-key-2024}
+    expire-time: 7200  # 2小时
+    refresh-expire-time: 604800  # 7天
+
+  # 跨域配置
+  cors:
+    allowed-origins: "*"
+    allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+    allowed-headers: "*"
+    exposed-headers: Authorization
+    allow-credentials: true
+    max-age: 3600
