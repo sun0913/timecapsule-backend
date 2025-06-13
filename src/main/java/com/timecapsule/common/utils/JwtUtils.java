@@ -3,6 +3,7 @@ package com.timecapsule.common.utils;
 import cn.hutool.core.date.DateUtil;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -185,11 +186,42 @@ public class JwtUtils {
     /**
      * 获取密钥
      */
+    /**
+     * 获取密钥（改进版）
+     */
     private SecretKey getSecretKey() {
+        // 验证密钥长度
+        validateSecretKey();
+
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
+    /**
+     * 验证密钥是否符合要求
+     */
+    @PostConstruct
+    private void validateSecretKey() {
+        if (secret == null || secret.trim().isEmpty()) {
+            throw new IllegalStateException("JWT密钥不能为空");
+        }
+
+        // 检查密钥长度（HS512需要至少64字节，但最小要求是32字节）
+        int keyLength = secret.getBytes(StandardCharsets.UTF_8).length;
+        if (keyLength < 32) {
+            throw new IllegalStateException(
+                    String.format("JWT密钥太短！当前长度：%d字节，最小要求：32字节（256位）。" +
+                            "建议使用64字节（512位）以获得更好的安全性。", keyLength)
+            );
+        }
+
+        // 警告：如果密钥长度小于64字节（针对HS512）
+        if (keyLength < 64) {
+            log.warn("JWT密钥长度为{}字节，建议使用64字节（512位）以获得更好的安全性", keyLength);
+        }
+
+        log.info("JWT密钥验证通过，密钥长度：{}字节", keyLength);
+    }
     /**
      * 从请求头中提取Token
      */
