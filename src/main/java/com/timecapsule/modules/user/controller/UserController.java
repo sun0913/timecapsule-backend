@@ -4,16 +4,23 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.timecapsule.common.result.PageResult;
 import com.timecapsule.common.result.Result;
+import com.timecapsule.common.result.ResultCode;
 import com.timecapsule.modules.user.dto.request.*;
 import com.timecapsule.modules.user.entity.User;
 import com.timecapsule.modules.user.service.UserService;
+import com.timecapsule.modules.user.service.UserWalletService;
+import com.timecapsule.modules.user.service.VerifyCodeService;
 import com.timecapsule.modules.user.vo.UserLoginVO;
 import com.timecapsule.modules.user.vo.UserStatsVO;
 import com.timecapsule.modules.user.vo.UserVO;
+import com.timecapsule.modules.user.vo.UserWalletVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,7 +28,9 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 用户控制器 - 优化版
@@ -38,6 +47,15 @@ public class UserController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private UserWalletService userWalletService;
+
+    @Autowired
+    private VerifyCodeService verifyCodeService;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     // ========== 认证相关接口 ==========
 
@@ -251,6 +269,103 @@ public class UserController {
                 .in(User::getId, request.getUserIds())
                 .set(User::getLevel, request.getLevel())
                 .update();
+
+        return Result.success();
+    }
+
+    // ========== 钱包相关接口 ==========
+
+    @PostMapping("/user/wallet/bind")
+    @Operation(summary = "绑定钱包")
+    public Result<UserWalletVO> bindWallet(@Valid @RequestBody WalletBindRequest request) {
+        UserVO currentUser = userService.getCurrentUser();
+        UserWalletVO wallet = userWalletService.bindWallet(currentUser.getUserId(), request);
+        return Result.success(wallet);
+    }
+
+    @PostMapping("/user/wallet/unbind")
+    @Operation(summary = "解绑钱包")
+    public Result<Void> unbindWallet(
+            @NotBlank(message = "密码不能为空") @RequestParam String password,
+            @NotBlank(message = "验证码不能为空") @RequestParam String verifyCode) {
+
+        UserVO currentUser = userService.getCurrentUser();
+
+        // TODO: 验证密码和验证码
+
+        userWalletService.unbindWallet(currentUser.getUserId());
+        return Result.success();
+    }
+
+    @GetMapping("/user/wallet")
+    @Operation(summary = "获取钱包信息")
+    public Result<UserWalletVO> getWalletInfo() {
+        UserVO currentUser = userService.getCurrentUser();
+        UserWalletVO wallet = userWalletService.getUserWallet(currentUser.getUserId());
+        return Result.success(wallet);
+    }
+
+// ========== 验证码相关接口 ==========
+
+    @PostMapping("/user/verify-code/send")
+    @Operation(summary = "发送验证码")
+    public Result<Map<String, Object>> sendVerifyCode(
+            @NotBlank(message = "目标不能为空") @RequestParam String target,
+            @NotBlank(message = "类型不能为空") @Pattern(regexp = "^(email|sms)$") @RequestParam String type,
+            @NotBlank(message = "用途不能为空") @Pattern(regexp = "^(register|reset|bind)$") @RequestParam String purpose) {
+
+        // 如果是已登录用户的操作，获取用户ID
+        String userId = null;
+        try {
+            UserVO currentUser = userService.getCurrentUser();
+            if (currentUser != null) {
+                userId = currentUser.getUserId();
+            }
+        } catch (Exception e) {
+            // 忽略，可能是未登录用户
+        }
+
+        verifyCodeService.sendCode(target, type, purpose, userId);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("expireTime", 300); // 5分钟
+
+        return Result.success(result);
+    }
+
+// ========== 密码相关接口 ==========
+
+    @PostMapping("/user/password/reset")
+    @Operation(summary = "重置密码")
+    public Result<Void> resetPassword(
+            @NotBlank(message = "账号不能为空") @RequestParam String account,
+            @NotBlank(message = "验证码不能为空") @RequestParam String verifyCode,
+            @NotBlank(message = "新密码不能为空") @Size(min = 8, max = 20) @RequestParam String newPassword) {
+
+        // 验证验证码
+        boolean valid = verifyCodeService.verifyCode(account, verifyCode, "reset");
+        if (!valid) {
+            return Result.fail(ResultCode.CAPTCHA_ERROR);
+        }
+
+        // 查找用户
+        User user = userService.lambdaQuery()
+                .and(wrapper -> wrapper
+                        .eq(User::getUsername, account)
+                        .or()
+                        .eq(User::getEmail, account)
+                        .or()
+                        .eq(User::getPhone, account)
+                )
+                .one();
+
+        if (user == null) {
+            return Result.fail(ResultCode.USER_NOT_EXIST);
+        }
+
+        // 更新密码
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userService.updateById(user);
 
         return Result.success();
     }

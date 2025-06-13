@@ -1,5 +1,6 @@
 package com.timecapsule.modules.user.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -17,6 +18,8 @@ import com.timecapsule.modules.user.vo.UserLoginVO;
 import com.timecapsule.modules.user.vo.UserVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -112,21 +115,98 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void changePassword(String oldPassword, String newPassword) {
+        // 获取当前用户
+        UserVO currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+
+        // 查询用户信息
+        User user = this.getById(currentUser.getId());
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_EXIST);
+        }
+
+        // 验证原密码
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            throw new BusinessException(ResultCode.OLD_PASSWORD_ERROR);
+        }
+
+        // 更新密码
+        user.setPassword(passwordEncoder.encode(newPassword));
+        this.updateById(user);
+
+        log.info("用户 {} 修改密码成功", user.getUsername());
+    }
+
+    @Override
     public UserLoginVO refreshToken(String refreshToken) {
-        return null;
+        // 验证刷新令牌
+        if (!jwtUtils.validateToken(refreshToken)) {
+            throw new BusinessException(ResultCode.REFRESH_TOKEN_EXPIRED);
+        }
+
+        // 获取用户ID
+        String userId = jwtUtils.getUserId(refreshToken);
+
+        // 查询用户信息
+        User user = this.lambdaQuery()
+                .eq(User::getUserId, userId)
+                .one();
+
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_EXIST);
+        }
+
+        // 生成新的令牌
+        return buildLoginVO(user, false);
     }
 
     @Override
     public UserVO getCurrentUser() {
-        return null;
+        // 从Security Context获取当前用户
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+
+        // 获取用户名
+        String username = authentication.getName();
+
+        // 查询用户信息
+        User user = this.lambdaQuery()
+                .eq(User::getUsername, username)
+                .one();
+
+        if (user == null) {
+            return null;
+        }
+
+        // 转换为VO
+        UserVO vo = new UserVO();
+        BeanUtil.copyProperties(user, vo);
+
+        return vo;
     }
 
-    @Override
-    public void changePassword(String oldPassword, String newPassword) {
+    // 添加一个根据用户ID获取用户信息的方法
+    public UserVO getUserByUserId(String userId) {
+        User user = this.lambdaQuery()
+                .eq(User::getUserId, userId)
+                .one();
 
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_EXIST);
+        }
+
+        UserVO vo = new UserVO();
+        BeanUtil.copyProperties(user, vo);
+
+        return vo;
     }
 
-    // 其他业务方法实现...
 
     /**
      * 构建登录响应

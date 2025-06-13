@@ -139,16 +139,12 @@
 			<artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
 			<version>${knife4j.version}</version>
 		</dependency>
-
-		<!-- Web3j (暂时保留，后续使用) -->
-		<!--
-        <dependency>
-            <groupId>org.web3j</groupId>
-            <artifactId>web3j-core</artifactId>
-            <version>${web3j.version}</version>
-        </dependency>
-        -->
-
+		<!-- Web3j -->
+		<dependency>
+			<groupId>org.web3j</groupId>
+			<artifactId>core</artifactId>
+			<version>4.12.2</version>
+		</dependency>
 		<!-- 测试依赖 -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

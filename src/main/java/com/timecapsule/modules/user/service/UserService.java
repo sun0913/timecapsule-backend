@@ -57,6 +57,8 @@ public interface UserService extends IService<User> {
      */
     UserVO getCurrentUser();
 
+    UserVO getUserByUserId(String userId);
+
     /**
      * 修改密码
      */
